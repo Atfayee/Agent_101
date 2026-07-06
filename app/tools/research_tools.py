@@ -1,44 +1,52 @@
-from app.tools.retry import retry_with_backoff
-from app.tools.error_handling import ToolTemporaryError, ToolInputError
 from typing import Literal
 
+from langchain_core.tools import tool
+
+from app.config.settings import settings
+from app.schemas.research import ResearchResult, ResearchToolOutput
+from app.tools.errors import ToolInputError, ToolTemporaryError
+from app.tools.retry import retry_with_backoff
+
 @retry_with_backoff(
-    max_attempts=3,
-    base_delay=0.5,
-    max_delay=2.0,
-    jitter=True
+    max_attempts=settings.max_retries,
 )
-def _search_provider(query: str, source: str) -> dict:
-
-    if "timeout" in query:
-
+def _mock_search_provider(query: str, source: str) -> ResearchToolOutput:
+    if "timeout" in query.lower():
         raise ToolTemporaryError("upstream search provider timed out.")
     
-    return {
-        "query": query,
-        "source": source,
-        "results": [
-            {
-                "title": f"Search result for {query}",
-                "summary": "Mocked research result",
-                "confidence": 0.82,
-                "url": "https://example.com/research-image",
-                "image": []
-            },
+    return ResearchToolOutput(
+        query=query,
+        source=source,
+        results=[
+            ResearchResult(
+                title=f"{source.upper()} reuslt for {query}",
+                summary=f"This mocked sources says {query} is relevant to LangGraph",
+                url="https://exmaple.com/research",
+                confidence=0.82,
+                image=[]
+            )
         ]
-    }
+    )
 
 
-def research_search_tool(query: str, source: Literal["web", "news", "docs"] = "web") -> dict:
+@tool
+def search_research_source(
+    query: str,
+    source: Literal["web", "docs", "news"] = "web"
+) -> dict:
+    """
+    Search a research source.
 
+    Agrs: 
+        query: Research query.
+        source: One of web, docs, news
+    """
     if not query or len(query) < 3:
         raise ToolInputError("Query must contain at least 3 characters.")
     
-    if source not in {"web", "news", "docs"}:
-
-        raise ToolInputError("Source must be in 'web', 'news', 'docs'.")
+    if source not in {"web", "docs", "news"}:
+        raise ToolInputError("Source must be from 'web', 'news' or 'docs'")
     
-    return _search_provider(
-        query=query,
-        source=source
-    )
+    return _mock_search_provider(query=query, source=source)
+
+research_tools = [search_research_source]

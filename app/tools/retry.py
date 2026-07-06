@@ -1,35 +1,21 @@
-from typing import Callable, ParamSpec, TypeVar
-from tools.error_handling import ToolTemporaryError
+from typing import TypeVar, ParamSpec, Callable
+from app.tools.errors import ToolTemporaryError
 from functools import wraps
-import time, random
+import random, time
 
-P = ParamSpec("P")
 R = TypeVar("R")
+P = ParamSpec("P")
+
 
 def retry_with_backoff(
     max_attempts: int = 3,
     base_delay: float = 0.5,
-    max_delay: float = 2.0,
+    max_delay: float = 4.0,
     jitter: bool = True
 ):
-    """
-    Only retries tool temporary error.
-    Does not retry:
-    - ToolInputError
-    - ToolFataError
-    - unknown errors
-
-    Args:
-        max_attempts: maximum number of retry
-        base_delay: first retry delay in seconds
-        max_delay: maximum retry delay cap
-        jitter: wthether to add random delay
-    """
-
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
-        @wraps(func)
+        @wraps
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-
             last_error: Exception | None = None
 
             for attempt in range(1, max_attempts + 1):
@@ -42,22 +28,14 @@ def retry_with_backoff(
                     last_error = error
 
                     if attempt == max_attempts:
-
-                        raise ToolTemporaryError(
-                            f"tool failure after {max_attempts} attemps"
-                            f"error: {last_error}"
-                        )
+                        raise ToolTemporaryError(f"retry reach {max_attempts} attempts")
                     
                     delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
 
                     if jitter:
-
-                        delay += random.uniform(0, delay * 0.25)
+                        delay = delay + random.uniform(0, delay * 0.25)
 
                     time.sleep(delay)
-
-            raise last_error
-        
-        return wrapper
-    
-    return decorator
+                raise last_error
+            return wrapper
+        return decorator
